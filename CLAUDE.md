@@ -4,48 +4,83 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CLI tool that reads `.xlsx` and/or `.pdf` files and generates a polished `.pptx` presentation styled to the Bear Nordic brand. Content is summarised by the Claude API (claude-sonnet-4-6) before being rendered via pptxgenjs.
+CLI tool that reads `.xlsx` and/or `.pdf` files and generates a polished `.pptx` styled to the Bear Nordic brand. No API key required — Claude Code itself reads the extracted content and writes the slide outline.
 
 ## Setup
 
 ```bash
-# Python dependencies (requires Python 3.12+)
+# Python dependencies (Python 3.12+)
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# Node.js dependencies (requires Node.js 18+)
+# Node.js dependencies (Node.js 18+)
 npm install
-
-# API key — never commit this
-export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-## Common Commands
+No API keys or credentials are needed.
 
+## Two-step workflow
+
+**Step 1 — extract content from source files:**
 ```bash
-# Generate a deck from one or more inputs
-.venv/bin/python3 generate_deck.py --input report.xlsx --output deck.pptx
-.venv/bin/python3 generate_deck.py --input report.xlsx --input notes.pdf --output deck.pptx
-
-# Run QA only on an existing pptx
-.venv/bin/python3 -c "from src.qa import run_qa; print(run_qa('deck.pptx'))"
+.venv/bin/python3 generate_deck.py --input report.xlsx --input notes.pdf --extract-only
+# → writes extracted_content.json
 ```
+
+**Step 2a — Claude Code reads extracted_content.json and writes outline.json**
+Claude Code synthesises the content into a structured JSON slide outline
+(title slide, agenda, themed sections, data highlights, closing slide) and
+writes it to `outline.json`.
+
+**Step 2b — render outline.json into a deck:**
+```bash
+.venv/bin/python3 generate_deck.py --outline outline.json --output deck.pptx
+# → writes deck.pptx, runs text QA, converts to images for visual review
+```
+
+**Step 3 — visual QA**
+The render step prints paths to slide JPEG images (if LibreOffice + pdftoppm
+are available). Claude Code reads each image and verifies: no overflow, no
+overlapping elements, no placeholder content, Bear Nordic brand applied.
 
 ## Architecture
 
 ```
-generate_deck.py            CLI entry point (argparse)
+generate_deck.py            CLI (--extract-only | --outline)
 src/
   readers/
     xlsx_reader.py          pandas → sheet/column/row/summary dict
     pdf_reader.py           pdfplumber → page/text/table dict
-  content_structurer.py     Claude API → JSON slide outline
   deck_renderer.py          pptxgenjs JS script → node → rezip
-  qa.py                     text QA (python-pptx) + visual QA (LibreOffice + Claude)
+  qa.py                     text QA + LibreOffice image conversion
 ```
 
-**Data flow:** read inputs → format as text → Claude returns JSON outline → deck_renderer builds a temp `.js` script → `node` executes it via pptxgenjs → Python rezips the `.pptx` → QA runs and reports issues.
+## outline.json schema
 
-**Bear Nordic palette** (`2C2C2C` near-black, `4B5320` olive, `C26A4A` terracotta, `EAE4D7` off-white, `7A715C` warm taupe). All hex values passed to pptxgenjs must omit the `#` prefix.
+```json
+{
+  "deck_title": "string",
+  "deck_subtitle": "string",
+  "agenda_items": ["string"],
+  "sections": [
+    {
+      "title": "string",
+      "key_points": ["string (≤12 words each)"],
+      "layout_hint": "bullets | two_column | stat_callout"
+    }
+  ],
+  "data_highlights": [
+    {"label": "string", "value": "string", "unit": "string", "context": "string"}
+  ],
+  "closing_message": "string"
+}
+```
 
-**pptxgenjs pitfalls:** never reuse option objects across calls (pptxgenjs mutates in-place); never prefix hex with `#`; use `bullet: true` not Unicode bullets.
+## Bear Nordic palette
+`2C2C2C` near-black · `4B5320` olive · `C26A4A` terracotta · `EAE4D7` off-white · `7A715C` warm taupe.
+All hex values passed to pptxgenjs must omit the `#` prefix.
+
+## pptxgenjs pitfalls
+- Never prefix hex colours with `#`
+- Never reuse option objects across `addText`/`addShape` calls (pptxgenjs mutates in-place)
+- Use `bullet: true`, not Unicode bullet characters

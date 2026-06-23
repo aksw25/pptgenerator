@@ -8,3 +8,7 @@ __pycache__/
 *.pptx
 *.pdf
 slide-*.jpg
+extracted_content.json
+outline.json
+sample.xlsx
+*_slides/

@@ -1,0 +1,9 @@
+{
+  "name": "pptgenerator",
+  "version": "1.0.0",
+  "description": "Bear Nordic deck generator — Node.js pptxgenjs dependency",
+  "private": true,
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}
